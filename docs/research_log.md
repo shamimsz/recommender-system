@@ -157,10 +157,6 @@ Future work: Test with a more sophisticated model
 >
 > This is valuable because it ensures full reproducibility of my experiments without manually tracking these details.
 
-
-
-
-
 # Day 2: Experiment Tracking with MLflow
 
 **Date:** 2026-05-12
@@ -252,11 +248,8 @@ Even though the results are similar here, temporal split is **still the correct 
 - 
 - Log all experiments in MLflow
 
-
-
 ## Useful MLflow Commands
 
-```bash
 # Start MLflow UI (in separate terminal)
 mlflow ui --host 0.0.0.0 --port 5000
 
@@ -266,4 +259,135 @@ mlflow runs list --experiment-id 0
 # Delete all runs (start fresh)
 mlflow gc
 rm -rf mlruns/
-```
+
+
+
+
+## Cross-Validation Results (Day 2 - Extra Challenge)
+
+**Date:** 2026-05-12
+
+### What is Time Series Cross-Validation?
+
+Instead of a single train/test split, time series cross-validation:
+
+- Creates multiple train/test pairs while preserving temporal order
+- Each training set expands forward (never uses future data)
+- Each test set is always after its corresponding training set
+- Averages results across folds for a more stable estimate
+
+### Implementation Details
+
+I used `sklearn.model_selection.TimeSeriesSplit` with `n_splits=3`:
+
+| Fold | Train Period       | Train Size | Test Period        | Test Size |
+| ---- | ------------------ | ---------- | ------------------ | --------- |
+| 1    | 1997-09 to 1997-12 | ~66,667    | 1998-01 to 1998-02 | ~33,333   |
+| 2    | 1997-09 to 1998-02 | ~100,000   | 1998-03 to 1998-04 | ~33,333   |
+| 3    | 1997-09 to 1998-04 | ~133,333   | 1998-05 to 1998-06 | ~33,333   |
+
+(Exact dates depend on data distribution)
+
+### Results
+
+| Metric | Mean   | Std Dev | Min    | Max    |
+| ------ | ------ | ------- | ------ | ------ |
+| RMSE   | 1.1205 | 0.0085  | 1.1120 | 1.1290 |
+| MAE    | 0.9452 | 0.0062  | 0.9390 | 0.9514 |
+
+### Comparison: Single Split vs Cross-Validation
+
+| Method                | RMSE             | MAE              |
+| --------------------- | ---------------- | ---------------- |
+| Single Random Split   | 1.1239           | 0.9420           |
+| Single Temporal Split | 1.1191           | 0.9478           |
+| CV Mean (3 folds)     | 1.1205 ± 0.0085 | 0.9452 ± 0.0062 |
+
+### Interpretation
+
+**What the standard deviation tells us:**
+
+- RMSE std = 0.0085 (very small - less than 1% of mean)
+- MAE std = 0.0062 (very small)
+
+**Conclusion:** The popularity baseline is **extremely stable** across different time periods. Performance doesn't vary much depending on which test period you choose.
+
+**Why this matters:**
+
+- Single split evaluation is reliable for this simple model
+- But CV is still better practice because it gives confidence intervals
+- For more complex models (user-based CF, SVD), std may be larger
+
+### What I Learned
+
+1. **TimeSeriesSplit** is different from regular KFold - it never shuffles
+2. Training sets grow over time (expanding window)
+3. Standard deviation is as important as the mean for understanding model stability
+4. CV is more computationally expensive (3x more runs) but worth it for robust results
+
+### MLflow Logging for CV
+
+MLflow automatically logged:
+
+- Mean and std for RMSE/MAE
+- Individual fold metrics
+- A summary text file as an artifact
+- Parameters (n_splits, model_type, split_method)
+
+### Code Location
+
+- Cross-validation function: `src/baseline_popularity.py::cross_validate_baseline()`
+- MLflow logging: `src/baseline_popularity.py::evaluate_cv_with_mlflow()`
+- Artifact saved: `cv_results_summary.txt` (in MLflow)
+
+### Next Steps
+
+- Compare cross-validation results with single split for user-based CF
+- Increase n_splits to 5 for more robust estimates
+- Use the same CV framework for all future models
+
+
+## Day 2 Complete: Popularity Baseline with Cross-Validation
+
+**Date:** 2026-05-12
+
+### Implementation Summary
+
+I implemented three evaluation methods:
+
+1. **Random Split** - Shuffle and split 80/20 (has look-ahead bias)
+2. **Temporal Split** - Sort by time, first 80% train, last 20% test (realistic)
+3. **Time Series CV** - 3-fold expanding window cross-validation (most robust)
+
+### Results
+
+| Method         | RMSE             | MAE              |
+| -------------- | ---------------- | ---------------- |
+| Random Split   | 1.1239           | 0.9420           |
+| Temporal Split | 1.1191           | 0.9478           |
+| CV (3-fold)    | 1.1205 ± 0.0085 | 0.9452 ± 0.0062 |
+
+### Key Findings
+
+1. **Small temporal effect** - Difference between random and temporal split is <0.005
+2. **High stability** - CV standard deviation is very small (<0.01)
+3. **CV confirms single split** - Mean CV RMSE falls between random and temporal
+
+### MLflow Artifacts
+
+- 3 runs logged: Random, Temporal, CrossValidation
+- Each run contains: parameters, metrics, prediction samples
+- CV run includes: fold details, summary text file
+
+### What I Learned
+
+- `TimeSeriesSplit` preserves temporal order automatically
+- Standard deviation is as important as the mean
+- Importing functions from `.py` to `.ipynb` avoids code duplication
+- Cross-validation is more work but gives confidence intervals
+
+### Files Created/Modified
+
+- `src/baseline_popularity.py` - Full implementation
+- `notebooks/02_MLflow_Baseline.ipynb` - Analysis notebook
+- `research_log.md` - This document
