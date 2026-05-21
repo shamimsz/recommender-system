@@ -1,0 +1,23 @@
+# Local environments
+venv/
+.venv/
+.env
+
+# Python caches and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Reproducible data and model artifacts
+data/
+models/
+
+# Local experiment tracking stores
+mlflow.db
+mlruns/
+mlartifacts/
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/
